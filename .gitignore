@@ -1,0 +1,24 @@
+# 依赖包
+node_modules/
+
+# 敏感私钥、环境变量与钱包文件 (绝对禁止上传)
+.env
+.env.*
+!.env.example
+wallet.json
+secrets/wallet.json
+*.key
+*.pem
+
+# 运行报告与测试生成物 (本地留存，不入版本控制)
+client/reports/*.json
+client/reports/*.docx
+reports/
+logs/
+*.log
+
+# 系统与 IDE 缓存
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
