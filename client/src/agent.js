@@ -35,6 +35,15 @@ async function run() {
   const placeName = process.argv[4] || process.env.EXPEDITION_LOCATION || '阿尔金山无人区';
   const profile = process.argv[5] || process.env.EXPEDITION_PROFILE || '极端荒野重装徒步穿越';
 
+  // 若目标为公网 HTTPS (如 Vercel 生产服务器)，自动配置全局代理通道以防 DNS 阻断
+  if (targetHost.startsWith('https://')) {
+    try {
+      const { ProxyAgent, setGlobalDispatcher } = await import('undici');
+      const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || 'http://127.0.0.1:7897';
+      setGlobalDispatcher(new ProxyAgent(proxyUrl));
+    } catch {}
+  }
+
   const mission = {
     name: placeName,
     lat,

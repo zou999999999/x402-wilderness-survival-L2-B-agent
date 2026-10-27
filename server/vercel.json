@@ -1,14 +1,15 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "src/config/**"
-    }
-  },
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/api/index.js?__path=/$1"
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.js?__path=/$1"
     }
   ]
 }

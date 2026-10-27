@@ -13,7 +13,6 @@ import { API_CATALOG, buildX402RoutesConfig, PRICE_USDC } from '../src/config/ca
 import { resolveLocation } from '../src/lib/location.js';
 import * as providers from '../src/providers/index.js';
 import { runServerAgent } from '../src/agent/deepseek_agent.js';
-import { ResilientFacilitatorClient } from '../src/lib/resilient_facilitator.js';
 
 const app = express();
 app.use(express.json());
@@ -34,34 +33,36 @@ const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
-// 构建 11 个 API 的 x402 付费规格路由表（每个 $0.001 USDC）
-const routesConfig = buildX402RoutesConfig();
-
-// 挂载 x402 中间件（未付款请求自动拦截返回 402，附带 payment-required 账单头）
-app.use(paymentMiddleware(routesConfig, resourceServer));
-
-// ==================== 1. 免费状态与目录端点 ====================
+// ==================== 1. 免费状态与目录端点 (优先匹配，避免中间件影响) ====================
 
 app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'x402-extreme-survival-recon',
-    role: 'server',
-    network: NETWORK,
-    asset: USDC_ASSET,
-    payTo: getPayToAddress(),
-    pricePerCall: PRICE_USDC,
-    totalEndpoints: API_CATALOG.length,
-    facilitator: FACILITATOR_URL,
-    timestamp: new Date().toISOString()
-  });
+  try {
+    let payTo = 'unknown';
+    try { payTo = getPayToAddress(); } catch (e) { payTo = `error: ${e.message}`; }
+    res.json({
+      status: 'ok',
+      service: 'x402-extreme-survival-recon',
+      role: 'server',
+      network: NETWORK,
+      asset: USDC_ASSET,
+      payTo,
+      pricePerCall: PRICE_USDC,
+      totalEndpoints: API_CATALOG.length,
+      facilitator: FACILITATOR_URL,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
 });
 
 app.get('/api/catalog', (_req, res) => {
+  let payTo = 'unknown';
+  try { payTo = getPayToAddress(); } catch (e) { payTo = `error: ${e.message}`; }
   res.json({
     service: '全球极端环境与野外探险生存决策系统 API 目录',
     pricing: `${PRICE_USDC} per call on ${NETWORK}`,
-    payTo: getPayToAddress(),
+    payTo,
     catalog: API_CATALOG
   });
 });
@@ -69,6 +70,12 @@ app.get('/api/catalog', (_req, res) => {
 app.get('/', (_req, res) => {
   res.send('🌐 x402 Extreme Survival Recon Service is running! Visit /health or /api/catalog.');
 });
+
+// 构建 11 个 API 的 x402 付费规格路由表（每个 $0.001 USDC）
+const routesConfig = buildX402RoutesConfig();
+
+// 挂载 x402 中间件（自动拦截未付款请求返回 402，并在付款后验证链上结算）
+app.use(paymentMiddleware(routesConfig, resourceServer));
 
 // 辅助：封装统一 Provider 处理器
 function handleProvider(fetcher, needsLoc = false) {
