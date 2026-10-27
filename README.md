@@ -118,12 +118,18 @@ npm run export-word
 
 ---
 
-## 四、 云端部署说明 (Vercel Serverless)
+## 四、 🌐 官方在线云端服务 (Vercel Live Endpoints)
 
-服务端已完整配置 `server/vercel.json`，可直接一键部署至 Vercel：
-1. 在 Vercel 控制台导入 `Level2_b/server` 目录；
-2. 在环境变量中添加：
-   - `PAY_TO`: 你的服务端收款钱包地址；
-   - `DEEPSEEK_API_KEY`: 你的 DeepSeek 官方 API 密钥；
-3. 部署成功后，将生成的云端域名填入客户端 `client/.env` 的 `TARGET_URL` 即可实现全球远程调用。
+本项目服务端已正式部署上线至 Vercel 云端，并接入了官方 DeepSeek 大模型中枢。全球任意客户端无需在本地运行任何服务端代码，即可直接跨网调用：
+
+- 🚀 **官方生产基准地址**：`https://server-three-nu-11.vercel.app`
+- 🤖 **参谋 Agent 咨询端点**：[`https://server-three-nu-11.vercel.app/api/agent/consult`](https://server-three-nu-11.vercel.app/api/agent/consult)（一站式打包 $0.005 USDC）
+- 💚 **在线健康检查**：[`https://server-three-nu-11.vercel.app/health`](https://server-three-nu-11.vercel.app/health)
+- 📋 **全量 API 在线目录**：[`https://server-three-nu-11.vercel.app/api/catalog`](https://server-three-nu-11.vercel.app/api/catalog)
+
+> **直接使用方式**：使用者只需在客户端 `client/.env` 中配置：
+> ```ini
+> TARGET_URL=https://server-three-nu-11.vercel.app
+> ```
+> 双击 `运行探险决策Agent.bat`，即可直接向云端 DeepSeek 参谋 Agent 发起咨询并自动生成 Word 报告！
 

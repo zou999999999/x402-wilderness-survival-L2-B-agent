@@ -247,7 +247,7 @@ Host: localhost:3000
 ### 9.1 服务端 402 协议账单探测
 ```http
 GET /api/agent/consult?lat=39.0&lon=83.5&place=Taklimakan HTTP/1.1
-Host: localhost:3000
+Host: server-three-nu-11.vercel.app (本地为 localhost:3001)
 
 HTTP/1.1 402 Payment Required
 payment-required: eyJ4NDAyVmVyc2lvbiI6Miwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMyIiwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJwYXlUbyI6IjB4ZGNEN0RBRmFmYjBFRjNkNTBiRGRCNDgwRGJkNTAzRmE2RDFCNkMwOSIsInByaWNlIjoiMC4wMDUiLCJhc3NldCI6IjB4MDM2Q2JENTM4NDJjNTQyNjYzNGU3OTI5NTQxZUMyMzE4ZjNkQ0Y3ZSJ9XX0=
