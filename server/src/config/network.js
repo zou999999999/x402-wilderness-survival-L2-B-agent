@@ -5,4 +5,4 @@
 export const NETWORK = 'eip155:84532';
 export const USDC_ASSET = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 export const USDC_DECIMALS = 6;
-export const FACILITATOR_URL = process.env.FACILITATOR_URL || 'https://x402.org/facilitator';
+export const FACILITATOR_URL = (process.env.FACILITATOR_URL || 'https://x402.org/facilitator').trim();

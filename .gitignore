@@ -22,3 +22,4 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+.vercel/

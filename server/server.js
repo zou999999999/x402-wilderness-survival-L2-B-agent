@@ -3,7 +3,7 @@ import app from './api/index.js';
 import { getPayToAddress } from './src/config/payee.js';
 import { API_CATALOG } from './src/config/catalog.js';
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const hasDeepSeekKey = !!(process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim());
 
 const server = app.listen(PORT, () => {

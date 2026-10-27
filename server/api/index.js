@@ -29,8 +29,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// 配置 x402 资源服务器与 Base Sepolia EVM 方案（集成高可用自愈协调器）
-const facilitatorClient = new ResilientFacilitatorClient({ url: FACILITATOR_URL });
+// 配置 x402 资源服务器与 Base Sepolia EVM 方案
+const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 const resourceServer = new x402ResourceServer(facilitatorClient)
   .register(NETWORK, new ExactEvmScheme());
 
