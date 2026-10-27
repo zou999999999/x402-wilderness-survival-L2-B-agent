@@ -85,7 +85,10 @@ Level2_b/
 cd server
 npm start
 ```
-服务将在 `http://localhost:3000` 启动，暴露 `/api/agent/consult` 端点。
+服务将在 `http://localhost:3001` 启动，暴露以下核心端点：
+- 🤖 **参谋 Agent 咨询端点**：`http://localhost:3001/api/agent/consult`（打包咨询 $0.005）
+- 💚 **服务健康检查**：`http://localhost:3001/health`
+- 📋 **全量 API 目录**：`http://localhost:3001/api/catalog`
 
 ### 2. 运行客户端 Agent 发起咨询
 双击 `运行探险决策Agent.bat`，根据终端菜单选择或输入目标地理点：
