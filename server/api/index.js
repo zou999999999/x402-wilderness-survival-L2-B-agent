@@ -105,7 +105,7 @@ function handleProvider(fetcher, needsLoc = false) {
   };
 }
 
-// ==================== 2. 七大野外生存核心端点 (付费 $0.001) ====================
+// ==================== 2. 11 个外部微服务数据端点 (各付费 $0.001) ====================
 
 app.get('/api/survival/earthquake', handleProvider(providers.fetchEarthquake, true));
 app.get('/api/survival/storm', handleProvider(providers.fetchStorm, true));
@@ -114,9 +114,6 @@ app.get('/api/survival/terrain', handleProvider(providers.fetchTerrain, true));
 app.get('/api/survival/dust', handleProvider(providers.fetchDust, true));
 app.get('/api/survival/sunlight', handleProvider(providers.fetchSunlight, true));
 app.get('/api/survival/geomagnetic', handleProvider(providers.fetchGeomagnetic, false));
-
-// ==================== 3. 四大噪音干扰端点 (付费 $0.001) ====================
-
 app.get('/api/noise/forex', handleProvider(providers.fetchForex, false));
 app.get('/api/noise/catfact', handleProvider(providers.fetchCatFact, false));
 app.get('/api/noise/crypto', handleProvider(providers.fetchCrypto, false));

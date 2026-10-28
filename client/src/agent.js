@@ -168,17 +168,25 @@ async function run() {
   console.log(`=================================================================`);
   console.log(`🤖 决策引擎: ${report.filterMeta?.engine || 'DeepSeek'}`);
   console.log(`🧩 模型规格: ${report.filterMeta?.model || 'deepseek-chat'}`);
-  console.log(`🎯 采纳微服务数量: ${report.filterMeta?.selectedCount ?? 7} 个`);
-  console.log(`🚫 排除微服务数量: ${report.filterMeta?.filteredNoiseCount ?? 4} 个`);
-  console.log(`💡 选路与过滤概述:   ${report.filterMeta?.rationaleSummary || '完成全量甄别'}`);
+  console.log(`🎯 自主采纳服务: ${report.filterMeta?.selectedCount ?? 0} 个`);
+  console.log(`🚫 自主排除服务: ${report.filterMeta?.filteredCount ?? Object.keys(report.filterMeta?.noiseRejectionReasons || {}).length ?? 0} 个`);
+  console.log(`📊 遥测数据完备率: ${report.dataCompletenessRate || '100%'}`);
+  console.log(`💡 选路与策略概述: ${report.filterMeta?.rationaleSummary || '完成全量甄别'}`);
 
-  console.log(`\n【服务端 Agent 数据服务排除与过滤存证】:`);
+  if (report.isDegraded || report.overallRisk === 'CRITICAL_DATA_DEFICIENCY') {
+    console.log(`\n🚨 【最高避险警示：本研判报告存在情报盲区，严禁视为正常通行凭证！】`);
+    if (Array.isArray(report.dataBlindSpots) && report.dataBlindSpots.length > 0) {
+      console.log(`⚠️ 缺失数据源列表: ${report.dataBlindSpots.map(b => `${b.id} (${b.error || '未响应'})`).join('、')}`);
+    }
+  }
+
+  console.log(`\n【服务端 Agent 数据服务排除存证】:`);
   const noiseReasons = report.filterMeta?.noiseRejectionReasons || {};
   for (const [id, reason] of Object.entries(noiseReasons)) {
     console.log(` - 🚫 排除 [${id}]: ${reason}`);
   }
 
-  console.log(`\n🚨 综合环境生存风险评级: ${report.riskLabel || report.overallRisk}`);
+  console.log(`\n🚨 综合生存风险评级: ${report.riskLabel || report.overallRisk}`);
 
   if (report.executiveSummary) {
     console.log(`\n🎖️ 【参谋长战地核心态势裁决】:\n   ${report.executiveSummary}`);
@@ -189,15 +197,23 @@ async function run() {
     report.keyThreats.forEach((t, i) => console.log(`   ${i + 1}. ${t}`));
   }
 
-  console.log(`\n【七大维度态势诊断】:`);
-  const diag = report.dimensionDiagnostics || {};
-  console.log(` 1. 地壳活动与崩塌:   ${diag.geologicalHazard}`);
-  console.log(` 2. 极端暴风极寒失温: ${diag.stormColdHypothermia}`);
-  console.log(` 3. 水文暴涨与山洪:   ${diag.hydrologyFlood}`);
-  console.log(` 4. 高程坡度与高反:   ${diag.terrainSlopeAltitude}`);
-  console.log(` 5. 沙尘黑风暴能见度: ${diag.dustSandstormVisibility}`);
-  console.log(` 6. 日照天黑生存窗口: ${diag.sunlightSurvivalWindow}`);
-  console.log(` 7. 空间天气通信生命: ${diag.commsNavigationLifeline}`);
+  if (Array.isArray(report.diagnosticsList) && report.diagnosticsList.length > 0) {
+    console.log(`\n【各微服务遥测诊断与现场状态】:`);
+    report.diagnosticsList.forEach((d, idx) => {
+      const icon = d.status === 'SUCCESS' ? '✅' : '❌';
+      console.log(` ${idx + 1}. [${icon}] ${d.id}: ${d.summary}`);
+    });
+  } else if (report.dimensionDiagnostics) {
+    console.log(`\n【七大维度态势诊断】:`);
+    const diag = report.dimensionDiagnostics || {};
+    console.log(` 1. 地壳活动与崩塌:   ${diag.geologicalHazard}`);
+    console.log(` 2. 极端暴风极寒失温: ${diag.stormColdHypothermia}`);
+    console.log(` 3. 水文暴涨与山洪:   ${diag.hydrologyFlood}`);
+    console.log(` 4. 高程坡度与高反:   ${diag.terrainSlopeAltitude}`);
+    console.log(` 5. 沙尘黑风暴能见度: ${diag.dustSandstormVisibility}`);
+    console.log(` 6. 日照天黑生存窗口: ${diag.sunlightSurvivalWindow}`);
+    console.log(` 7. 空间天气通信生命: ${diag.commsNavigationLifeline}`);
+  }
 
   console.log(`\n【探险指挥部核心行动指令】:`);
   const directives = report.actionDirectives || [];
