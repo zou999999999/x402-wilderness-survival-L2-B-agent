@@ -132,7 +132,12 @@ async function run() {
       });
 
       if (!recRes.ok) {
-        throw new Error(`云端返回 HTTP ${recRes.status}`);
+        let errMsg = `HTTP ${recRes.status} ${recRes.statusText}`;
+        try {
+          const errJson = await recRes.json();
+          if (errJson.error) errMsg = errJson.error;
+        } catch {}
+        throw new Error(errMsg);
       }
 
       const recData = await recRes.json();
@@ -158,11 +163,9 @@ async function run() {
         });
       }
     } catch (err) {
-      console.warn(`⚠️ 咨询云端推荐异常: ${err.message}，自动回退至本地标准微服务工具集`);
-      approved = NEUTRAL_TOOLSET_CATALOG.slice(0, 7).map(c => ({ ...c, reason: '本地启发式规则备用推荐' }));
-      rejected = NEUTRAL_TOOLSET_CATALOG.slice(7).map(c => ({ ...c, reason: '启发式规则排除非环境端点' }));
-      thinkingProcess = '网络回退模式：优先采购环境类微服务，排除金融与科普端点。';
-      selectionEngine = 'Local Fallback Heuristics';
+      console.error(`\n❌ [云端智能参谋调用失败]: ${err.message}`);
+      console.error(`💡 提示: Level 2-B 服务端需依赖有效配置的 DEEPSEEK_API_KEY 驱动智能选路，请检查云端环境变量配置后重试。\n`);
+      process.exit(1);
     }
   }
 
