@@ -210,11 +210,14 @@ async function run() {
         console.log(`   📋 账单回执: ${billInfo}`);
       }
 
-      // 2. 执行真实 EIP-3009 授权签名并完成结算
-      let paidRes = await paymentFetch(fullUrl);
-      if (!paidRes.ok && paidRes.status === 402) {
-        await new Promise(r => setTimeout(r, 1000));
+      // 2. 执行真实 EIP-3009 授权签名并完成结算 (自动重试 3 次以应对网络或 RPC 抖动)
+      let paidRes = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
         paidRes = await paymentFetch(fullUrl);
+        if (paidRes.ok) break;
+        if (paidRes.status === 402 && attempt < 3) {
+          await new Promise(r => setTimeout(r, 1200));
+        }
       }
       const latencyMs = Date.now() - t0;
 

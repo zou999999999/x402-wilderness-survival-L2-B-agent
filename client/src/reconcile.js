@@ -78,7 +78,7 @@ async function main() {
   const payToAddr = getExpectedPayToAddress();
 
   console.log(`=========================================================`);
-  console.log(`🔍 [x402 Level 2-A 多源数据服务采购 链上审计与对账]`);
+  console.log(`🔍 [x402 Level 2-B 云端AI调度微支付 链上审计与对账]`);
   console.log(`🌐 链网络: Base Sepolia (Chain ID: 84532)`);
   console.log(`💵 合约地址: ${USDC_CONTRACT}`);
   console.log(`👛 付款方钱包: ${payerAddr || '未配置'}`);
