@@ -4,19 +4,25 @@ dns.setDefaultResultOrder('ipv4first');
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { wrapFetchWithPaymentFromConfig, decodePaymentResponseHeader } from '@x402/fetch';
 import { ExactEvmScheme } from '@x402/evm';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, http, formatUnits } from 'viem';
 import { baseSepolia } from 'viem/chains';
 
-import { getPayerPrivateKey, getPayerAddress, getExpectedPayToAddress } from './config/wallet.js';
+import { getPayerPrivateKey, getExpectedPayToAddress } from './config/wallet.js';
 import { exportReportToDocx } from './lib/docx_exporter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const reportsDir = path.resolve(__dirname, '../reports');
 
+// 加载环境变量 (优先 client/.env)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
+
+// Base Sepolia USDC 合约
 const USDC_CONTRACT = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const ERC20_ABI = [
   {
@@ -28,41 +34,52 @@ const ERC20_ABI = [
   }
 ];
 
-async function run() {
-  const targetHost = (process.env.TARGET_URL || 'http://localhost:3000').replace(/\/+$/, '');
-  const lat = parseFloat(process.argv[2] || process.env.EXPEDITION_LAT || '38.0');
-  const lon = parseFloat(process.argv[3] || process.env.EXPEDITION_LON || '88.5');
-  const placeName = process.argv[4] || process.env.EXPEDITION_LOCATION || '阿尔金山无人区';
-  const profile = process.argv[5] || process.env.EXPEDITION_PROFILE || '极端荒野重装徒步穿越';
+/**
+ * 客观中立的 11 个微服务备用目录 (Fallback Catalog)
+ */
+const NEUTRAL_TOOLSET_CATALOG = [
+  { id: 'earthquake', path: '/api/survival/earthquake', name: '近场地震与断裂带活动监测', category: 'geology', price: '$0.001', requiresLocation: true },
+  { id: 'storm', path: '/api/survival/storm', name: '极端风暴与温温雨雪气象监测', category: 'meteorology', price: '$0.001', requiresLocation: true },
+  { id: 'flood', path: '/api/survival/flood', name: '流域水文与径流漫滩监测', category: 'hydrology', price: '$0.001', requiresLocation: true },
+  { id: 'terrain', path: '/api/survival/terrain', name: '数字高程与局部坡度勘察', category: 'topography', price: '$0.001', requiresLocation: true },
+  { id: 'dust', path: '/api/survival/dust', name: '沙尘暴与大气颗粒物浓度监测', category: 'air_quality', price: '$0.001', requiresLocation: true },
+  { id: 'sunlight', path: '/api/survival/sunlight', name: '昼夜天光与日光有效窗口', category: 'astronomy', price: '$0.001', requiresLocation: true },
+  { id: 'geomagnetic', path: '/api/survival/geomagnetic', name: '空间天气与地磁暴监测', category: 'space_weather', price: '$0.001', requiresLocation: false },
+  { id: 'forex', path: '/api/market/forex', name: '国际外汇法定货币汇率牌价', category: 'foreign_exchange', price: '$0.001', requiresLocation: false },
+  { id: 'catfact', path: '/api/info/catfact', name: '猫科动物科普与生物事实', category: 'zoology_facts', price: '$0.001', requiresLocation: false },
+  { id: 'crypto', path: '/api/market/crypto', name: '加密数字货币现货行情走势', category: 'cryptocurrency', price: '$0.001', requiresLocation: false },
+  { id: 'iss', path: '/api/orbit/iss', name: '国际空间站轨道天顶轨迹监测', category: 'orbital_space', price: '$0.001', requiresLocation: false }
+];
 
-  // 若目标为公网 HTTPS (如 Vercel 生产服务器)，自动配置全局代理通道以防 DNS 阻断
-  if (targetHost.startsWith('https://')) {
-    try {
-      const { ProxyAgent, setGlobalDispatcher } = await import('undici');
-      const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || 'http://127.0.0.1:7897';
-      setGlobalDispatcher(new ProxyAgent(proxyUrl));
-    } catch {}
+async function run() {
+  const targetHost = (process.env.TARGET_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  const isForceAll = process.argv.includes('--all') || process.env.FORCE_ALL === 'true';
+
+  let lat = parseFloat(process.env.EXPEDITION_LAT || '38.0');
+  let lon = parseFloat(process.env.EXPEDITION_LON || '88.5');
+  let placeName = process.env.EXPEDITION_LOCATION || '阿尔金山无人区';
+  let profile = process.env.EXPEDITION_PROFILE || '极端荒野重装徒步穿越';
+
+  for (let i = 2; i < process.argv.length; i++) {
+    const arg = process.argv[i];
+    if (arg === '--lat' && process.argv[i + 1]) lat = parseFloat(process.argv[++i]);
+    else if (arg === '--lon' && process.argv[i + 1]) lon = parseFloat(process.argv[++i]);
+    else if (arg === '--place' && process.argv[i + 1]) placeName = process.argv[++i];
+    else if (arg === '--profile' && process.argv[i + 1]) profile = process.argv[++i];
   }
 
-  const mission = {
-    name: placeName,
-    lat,
-    lon,
-    profile
-  };
+  const mission = { name: placeName, lat, lon, profile };
 
   console.log(`\n=================================================================`);
-  console.log(`🧭 [Client Agent] Level 2_b 双智能体协同 (A2A) 探险决策客户端启动`);
-  console.log(`🤝 交互模式: 方案 B (由服务端 DeepSeek 智能体全权负责选路、噪音过滤与融合)`);
-  console.log(`🎯 服务端目标: ${targetHost}`);
-  console.log(`📍 目标地理点: ${mission.name} (${mission.lat}, ${mission.lon})`);
-  console.log(`🧗 探险任务性质: ${mission.profile}`);
+  console.log(`🧭 [x402 Level 2-B] 云端智能参谋与按需采购 Agent`);
+  console.log(`📍 【探险任务参数】目标地: <${mission.name}> | 经度: <${mission.lon}> | 纬度: <${mission.lat}> | 任务性质: <${mission.profile}>`);
+  console.log(`🎯 服务中介节点: ${targetHost}`);
   console.log(`=================================================================\n`);
 
   // 1. 验证客户端付款钱包私钥
   const payerPrivateKey = getPayerPrivateKey();
   if (!payerPrivateKey) {
-    console.error('❌ 未找到付款钱包私钥！请在 client/.env 或 secrets/wallet.json 中配置 PAYER_PRIVATE_KEY。');
+    console.error('❌ 未找到付款钱包私钥！请在 client/.env 中配置 PAYER_PRIVATE_KEY。');
     process.exit(1);
   }
 
@@ -72,7 +89,7 @@ async function run() {
   // 2. 检查链上余额
   const publicClient = createPublicClient({
     chain: baseSepolia,
-    transport: http(undefined, { timeout: 2000, retryCount: 0 })
+    transport: http(undefined, { timeout: 25000, retryCount: 1 })
   });
 
   try {
@@ -87,38 +104,69 @@ async function run() {
     ]);
 
     console.log(`⛽ 链上 Gas (ETH):   ${formatUnits(ethBal, 18)} ETH`);
-    console.log(`💵 链上余额 (USDC): ${formatUnits(usdcBal, 6)} USDC`);
+    console.log(`💵 链上余额 (USDC): ${formatUnits(usdcBal, 6)} USDC\n`);
   } catch (err) {
-    console.warn(`⚠️ 查询链上余额提示: ${err.message}（继续执行测试）`);
+    console.warn(`⚠️ 查询链上余额提示: ${err.message}（继续推进执行）\n`);
   }
 
-  // 3. 构建请求服务端 Agent 咨询端点的 URL
-  const consultUrl = `${targetHost}/api/agent/consult?lat=${mission.lat}&lon=${mission.lon}&place=${encodeURIComponent(mission.name)}&profile=${encodeURIComponent(mission.profile)}`;
+  let approved = [];
+  let rejected = [];
+  let thinkingProcess = '';
+  let selectionEngine = '';
 
-  console.log(`\n⚡ ---------------- [开始向服务端 Agent 发起咨询] ----------------`);
-  console.log(`📡 目标端点: ${consultUrl}`);
-
-  // 4. 第一阶段：发送未付费探测请求，获取 402 协议账单
-  console.log(`⏳ [阶段 1/3] 发送未付费探测请求探测服务端 Agent 账单...`);
-  const probeRes = await fetch(consultUrl);
-
-  if (probeRes.status !== 402) {
-    console.warn(`⚠️ 服务端未返回 402，返回状态: ${probeRes.status}`);
+  // 3. 选路阶段：如果强制全量，则直接全买；否则向云端 AI Dispatcher 咨询精准推荐
+  if (isForceAll) {
+    console.log(`📦 【全量采购模式】用户指定购买全部可用微服务 API (共 ${NEUTRAL_TOOLSET_CATALOG.length} 项)`);
+    approved = NEUTRAL_TOOLSET_CATALOG.map(c => ({ ...c, reason: '用户指定全量采购模式' }));
+    rejected = [];
+    thinkingProcess = '用户指定全量采购模式，直接购买全部 11 个微服务端点。';
+    selectionEngine = 'Direct All-Inclusive';
   } else {
-    const paymentReqHeader = probeRes.headers.get('payment-required') || probeRes.headers.get('x-payment-required');
-    let billSummary = '已返回 402 标准协议账单';
-    if (paymentReqHeader) {
-      try {
-        const bill = JSON.parse(Buffer.from(paymentReqHeader, 'base64').toString('utf8'));
-        const accept = bill.accepts?.[0] || {};
-        billSummary = `打包咨询费: ${accept.price || '0.005 USDC'} | 收款地址: ${accept.payTo}`;
-      } catch {}
+    console.log(`🤖 正在向云端智能参谋发起咨询 (${targetHost}/api/recommend)...`);
+    try {
+      const recRes = await fetch(`${targetHost}/api/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mission),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      if (!recRes.ok) {
+        throw new Error(`云端返回 HTTP ${recRes.status}`);
+      }
+
+      const recData = await recRes.json();
+      approved = recData.approvedApis || [];
+      rejected = recData.rejectedApis || [];
+      thinkingProcess = recData.thinkingProcess || '云端 AI 结合任务剖面完成按需选路';
+      selectionEngine = `Cloud AI Dispatcher (${recData.engine || 'DeepSeek'})`;
+
+      console.log(`\n✨ [云端参谋选路完成] 精准入选: ${approved.length} 项，主动排除: ${rejected.length} 项`);
+      console.log(`🧠 【选路思考过程】:`);
+      console.log(`   ${thinkingProcess}\n`);
+
+      console.log(`📋 采购计划: 准备购买 ${approved.length} 项微服务 | 预估总额: ${recData.estimatedBudget || (approved.length * 0.001).toFixed(3) + ' USDC'}`);
+      approved.forEach((a, i) => {
+        console.log(`   [${i + 1}] ${a.name} (${a.path})`);
+        console.log(`       └ 理由: ${a.reason || '任务高度关联'}`);
+      });
+
+      if (rejected.length > 0) {
+        console.log(`\n   (主动排除 ${rejected.length} 项无关端点，节省 ${(rejected.length * 0.001).toFixed(3)} USDC):`);
+        rejected.forEach((r, i) => {
+          console.log(`   [${i + 1}] ${r.name} - 理由: ${r.reason || '无现实关联'}`);
+        });
+      }
+    } catch (err) {
+      console.warn(`⚠️ 咨询云端推荐异常: ${err.message}，自动回退至本地标准微服务工具集`);
+      approved = NEUTRAL_TOOLSET_CATALOG.slice(0, 7).map(c => ({ ...c, reason: '本地启发式规则备用推荐' }));
+      rejected = NEUTRAL_TOOLSET_CATALOG.slice(7).map(c => ({ ...c, reason: '启发式规则排除非环境端点' }));
+      thinkingProcess = '网络回退模式：优先采购环境类微服务，排除金融与科普端点。';
+      selectionEngine = 'Local Fallback Heuristics';
     }
-    console.log(`   📋 账单探测成功: HTTP 402 (${billSummary})`);
   }
 
-  // 5. 第二阶段：通过 wrapFetchWithPaymentFromConfig 自动完成链上结算并获取服务端 Agent 报告
-  console.log(`⏳ [阶段 2/3] 客户端正在签名 Base Sepolia EVM 支付凭据并向 Facilitator 清算...`);
+  // 4. 初始化 x402 客户端付款执行器
   const paymentFetch = wrapFetchWithPaymentFromConfig(fetch, {
     schemes: [
       {
@@ -128,135 +176,164 @@ async function run() {
     ]
   });
 
-  const t0 = Date.now();
-  let paidRes = await paymentFetch(consultUrl);
-  if (!paidRes.ok && paidRes.status === 402) {
-    // 抖动时重试一次
-    await new Promise(r => setTimeout(r, 1000));
-    paidRes = await paymentFetch(consultUrl);
-  }
-  const latencyMs = Date.now() - t0;
+  // 5. 执行真实 x402 链上微支付购买与数据采集
+  console.log(`\n⚡ ================ [开始执行 x402 真实微支付采购] ================`);
+  const collectedData = {};
+  const purchaseAudit = [];
 
-  if (!paidRes.ok) {
-    let errMsg = `HTTP ${paidRes.status} ${paidRes.statusText}`;
-    try {
-      const errJson = await paidRes.json();
-      if (errJson.error) errMsg = errJson.error;
-    } catch {}
-    throw new Error(`服务端 Agent 调用失败: ${errMsg}`);
-  }
-
-  // 提取结算回执头
-  const paymentResHeader = paidRes.headers.get('payment-response') || paidRes.headers.get('x-payment-response');
-  let txHash = null;
-  if (paymentResHeader) {
-    try {
-      const receipt = decodePaymentResponseHeader(paymentResHeader);
-      txHash = receipt.transactionHash || receipt.txHash || receipt.hash;
-    } catch {}
-  }
-
-  const responseBody = await paidRes.json();
-  const report = responseBody.report || {};
-
-  console.log(`✨ [阶段 3/3] 购买成功! 状态: 200 OK | 结算总耗时: ${latencyMs}ms`);
-  console.log(`⛓️ 链上结算凭证 (Tx): ${txHash ? txHash.slice(0, 24) + '...' : '0x' + Array.from({length: 40}, () => 'f').join('')}`);
-
-  // 6. 打印服务端 DeepSeek Agent 输出的完整态势研判
-  console.log(`\n=================================================================`);
-  console.log(`🧠 [服务端 DeepSeek 智能体态势裁决全景]`);
-  console.log(`=================================================================`);
-  console.log(`🤖 决策引擎: ${report.filterMeta?.engine || 'DeepSeek'}`);
-  console.log(`🧩 模型规格: ${report.filterMeta?.model || 'deepseek-chat'}`);
-  console.log(`🎯 自主采纳服务: ${report.filterMeta?.selectedCount ?? 0} 个`);
-  console.log(`🚫 自主排除服务: ${report.filterMeta?.filteredCount ?? Object.keys(report.filterMeta?.noiseRejectionReasons || {}).length ?? 0} 个`);
-  console.log(`📊 遥测数据完备率: ${report.dataCompletenessRate || '100%'}`);
-  console.log(`💡 选路与策略概述: ${report.filterMeta?.rationaleSummary || '完成全量甄别'}`);
-
-  if (report.isDegraded || report.overallRisk === 'CRITICAL_DATA_DEFICIENCY') {
-    console.log(`\n🚨 【最高避险警示：本研判报告存在情报盲区，严禁视为正常通行凭证！】`);
-    if (Array.isArray(report.dataBlindSpots) && report.dataBlindSpots.length > 0) {
-      console.log(`⚠️ 缺失数据源列表: ${report.dataBlindSpots.map(b => `${b.id} (${b.error || '未响应'})`).join('、')}`);
+  for (let i = 0; i < approved.length; i++) {
+    const api = approved[i];
+    const queryParams = new URLSearchParams();
+    if (api.requiresLocation) {
+      queryParams.set('lat', mission.lat);
+      queryParams.set('lon', mission.lon);
+      queryParams.set('place', mission.name);
     }
+    const fullUrl = `${targetHost}${api.path}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+    console.log(`\n[${i + 1}/${approved.length}] 🛒 正在购买: ${api.name} (${api.path})`);
+
+    const t0 = Date.now();
+    try {
+      // 1. 发起探测请求
+      const probeRes = await fetch(fullUrl, { signal: AbortSignal.timeout(35000) });
+      if (probeRes.status === 402) {
+        const paymentReqHeader = probeRes.headers.get('payment-required') || probeRes.headers.get('x-payment-required');
+        let billInfo = 'HTTP 402 Payment Required';
+        if (paymentReqHeader) {
+          try {
+            const bill = JSON.parse(Buffer.from(paymentReqHeader, 'base64').toString('utf8'));
+            const accept = bill.accepts?.[0] || {};
+            billInfo = `账单金额: ${accept.price || '0.001 USDC'} | 收款方: ${accept.payTo}`;
+          } catch {}
+        }
+        console.log(`   📋 账单回执: ${billInfo}`);
+      }
+
+      // 2. 执行真实 EIP-3009 授权签名并完成结算
+      let paidRes = await paymentFetch(fullUrl);
+      if (!paidRes.ok && paidRes.status === 402) {
+        await new Promise(r => setTimeout(r, 1000));
+        paidRes = await paymentFetch(fullUrl);
+      }
+      const latencyMs = Date.now() - t0;
+
+      if (!paidRes.ok) {
+        throw new Error(`HTTP ${paidRes.status} ${paidRes.statusText}`);
+      }
+
+      // 提取真实链上交易哈希（Tx Hash）—— 绝对不伪造假哈希！
+      const paymentResHeader = paidRes.headers.get('payment-response') || paidRes.headers.get('x-payment-response');
+      let txHash = null;
+      if (paymentResHeader) {
+        try {
+          const receipt = decodePaymentResponseHeader(paymentResHeader);
+          txHash = receipt.transaction || receipt.transactionHash || receipt.txHash || receipt.hash || null;
+        } catch (err) {
+          console.warn('   ⚠️ payment-response 头解析警告:', err.message);
+        }
+      }
+
+      const body = await paidRes.json();
+      collectedData[api.id] = body;
+
+      const summaryText = body.summary || body.assessment?.summary || '数据已成功采集';
+
+      purchaseAudit.push({
+        id: api.id,
+        name: api.name,
+        path: api.path,
+        price: api.price || '$0.001',
+        status: 'SUCCESS',
+        latencyMs,
+        txHash,
+        summary: summaryText
+      });
+
+      console.log(`   ✨ 购买成功! 状态: 200 OK | 耗时: ${latencyMs}ms`);
+      console.log(`   ⛓️ 真实结算凭证 (Tx): ${txHash ? txHash : '链上批处理暂未立即返回哈希'}`);
+      console.log(`   📑 遥测内容: ${summaryText}`);
+
+    } catch (err) {
+      console.error(`   ❌ 购买失败: ${err.message}`);
+      purchaseAudit.push({
+        id: api.id,
+        name: api.name,
+        path: api.path,
+        price: api.price || '$0.001',
+        status: 'FAILED',
+        txHash: null,
+        error: err.message
+      });
+    }
+
+    await new Promise(r => setTimeout(r, 400));
   }
 
-  console.log(`\n【服务端 Agent 数据服务排除存证】:`);
-  const noiseReasons = report.filterMeta?.noiseRejectionReasons || {};
-  for (const [id, reason] of Object.entries(noiseReasons)) {
-    console.log(` - 🚫 排除 [${id}]: ${reason}`);
-  }
+  // 6. 汇总交付
+  console.log(`\n=================================================================`);
+  console.log(`📦 [数据交付汇总] 探险任务: ${mission.name} (${mission.lon}°E, ${mission.lat}°N)`);
+  console.log(`📊 采购统计: 计划购买 ${approved.length} 项 | 成功交付 ${purchaseAudit.filter(p => p.status === 'SUCCESS').length} 项`);
+  console.log(`💰 实际支出: ${(purchaseAudit.filter(p => p.status === 'SUCCESS').length * 0.001).toFixed(3)} USDC`);
+  console.log(`=================================================================`);
 
-  console.log(`\n🚨 综合生存风险评级: ${report.riskLabel || report.overallRisk}`);
+  console.log(`\n【各微服务真实遥测数据反馈清单】:`);
+  purchaseAudit.forEach((item, i) => {
+    if (item.status === 'SUCCESS') {
+      console.log(` ${i + 1}. ✅ [${item.name}] (${item.path})`);
+      console.log(`    • 交易哈希: ${item.txHash || '已结算'}`);
+      console.log(`    • 数据摘要: ${item.summary}`);
+    } else {
+      console.log(` ${i + 1}. ❌ [${item.name}] 购买失败 (${item.error || '未响应'})`);
+    }
+  });
 
-  if (report.executiveSummary) {
-    console.log(`\n🎖️ 【参谋长战地核心态势裁决】:\n   ${report.executiveSummary}`);
-  }
-
-  if (Array.isArray(report.keyThreats) && report.keyThreats.length > 0) {
-    console.log(`\n⚠️ 【前线致命威胁与次生风险】:`);
-    report.keyThreats.forEach((t, i) => console.log(`   ${i + 1}. ${t}`));
-  }
-
-  if (Array.isArray(report.diagnosticsList) && report.diagnosticsList.length > 0) {
-    console.log(`\n【各微服务遥测诊断与现场状态】:`);
-    report.diagnosticsList.forEach((d, idx) => {
-      const icon = d.status === 'SUCCESS' ? '✅' : '❌';
-      console.log(` ${idx + 1}. [${icon}] ${d.id}: ${d.summary}`);
-    });
-  } else if (report.dimensionDiagnostics) {
-    console.log(`\n【七大维度态势诊断】:`);
-    const diag = report.dimensionDiagnostics || {};
-    console.log(` 1. 地壳活动与崩塌:   ${diag.geologicalHazard}`);
-    console.log(` 2. 极端暴风极寒失温: ${diag.stormColdHypothermia}`);
-    console.log(` 3. 水文暴涨与山洪:   ${diag.hydrologyFlood}`);
-    console.log(` 4. 高程坡度与高反:   ${diag.terrainSlopeAltitude}`);
-    console.log(` 5. 沙尘黑风暴能见度: ${diag.dustSandstormVisibility}`);
-    console.log(` 6. 日照天黑生存窗口: ${diag.sunlightSurvivalWindow}`);
-    console.log(` 7. 空间天气通信生命: ${diag.commsNavigationLifeline}`);
-  }
-
-  console.log(`\n【探险指挥部核心行动指令】:`);
-  const directives = report.actionDirectives || [];
-  directives.forEach((dir, i) => console.log(`   ${i + 1}. ${dir}`));
-
-  // 7. 持久化报告 (同时输出审计 JSON 与专业排版 Word .docx)
+  // 7. 归档结构化报告 (JSON 与 Word .docx 报告)
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true });
   }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const reportPath = path.resolve(reportsDir, `survival_b_consult_${timestamp}.json`);
-  fs.writeFileSync(reportPath, JSON.stringify({
-    clientPayer: account.address,
-    serverConsultEndpoint: consultUrl,
-    packagePrice: '0.005 USDC',
-    latencyMs,
-    txHash,
-    responseBody
-  }, null, 2), 'utf8');
+  const reportPath = path.resolve(reportsDir, `survival_recon_${timestamp}.json`);
+  const docxPath = path.resolve(reportsDir, `survival_recon_${timestamp}.docx`);
 
-  console.log(`\n💾 双智能体协同结构化对账数据已归档: ${reportPath}`);
+  const reportData = {
+    expedition: mission,
+    timestamp: new Date().toISOString(),
+    payerAddress: account.address,
+    selectionEngine,
+    thinkingProcess,
+    purchaseCount: approved.length,
+    successCount: purchaseAudit.filter(p => p.status === 'SUCCESS').length,
+    purchaseAudit,
+    collectedData
+  };
 
-  // 自动排版并生成 Word (.docx) 报告
-  const docxPath = path.resolve(reportsDir, `survival_b_consult_${timestamp}.docx`);
+  fs.writeFileSync(reportPath, JSON.stringify(reportData, null, 2), 'utf8');
+  console.log(`\n💾 结构化审计 JSON 数据已归档: ${reportPath}`);
+
+  // 自动生成专业排版的 Word (.docx) 交付报告
   try {
     await exportReportToDocx({
       mission,
-      report,
+      purchaseAudit,
+      collectedData,
       payerAddress: account.address,
-      consultUrl,
-      txHash,
-      latencyMs,
+      selectionEngine,
+      rationaleSummary: thinkingProcess,
+      timestamp: new Date().toISOString(),
       outputPath: docxPath
     });
-    console.log(`📄 战地专业 Word (.docx) 研判报告已就绪: ${docxPath}`);
-  } catch (docxErr) {
-    console.warn(`⚠️ Word 报告导出提示: ${docxErr.message}`);
+    console.log(`📄 专业 Word 交付报告已生成:   ${docxPath}`);
+    console.log(`💡 您可直接双击上述 .docx 文件，用 Microsoft Word 或 WPS Office 阅读！`);
+  } catch (err) {
+    console.warn(`⚠️ 导出 Word 报告异常: ${err.message}`);
   }
 
   console.log(`=================================================================\n`);
 }
 
 run().catch(err => {
-  console.error('Level 2_b 客户端 Agent 致命异常:', err);
+  console.error('Agent 运行致命异常:', err);
   process.exit(1);
 });

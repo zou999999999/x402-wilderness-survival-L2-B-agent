@@ -1,140 +1,89 @@
-# x402 Level 2_b: 双智能体协同 (A2A) 极端环境探险生存决策系统
+# x402 Level 2-B: 全球极端环境与野外探险多源数据服务 (云端 AI 参谋版)
 
-本项目为 **x402 协议高阶拓展项目（Level 2 方向 B）**，在原子级单 API 结算基础上实现了 **A2A（Agent-to-Agent，双智能体协同与智能体即服务 AaaS）模式**：
-- **服务端智能体 (Server Agent / Recon Broker)**：常驻服务端的「极端环境探险决策参谋」，通过 **100% 本地文档驱动 (`API_SKILL.md`)** 接入 **DeepSeek 大模型**。接收客户端高层探险诉求，在**零人工提前标注噪音**的前提下，自主完成 11 个微服务数据源的认知选路与无关干扰服务排除，并发调度遥感微服务采集数据，深度融合生成结构化态势裁决与战地行动禁令。
-- **客户端智能体 (Client Agent / Expedition Consumer)**：轻量级探险消费端，只需发起一站式咨询请求，通过 x402 协议一口价支付打包费用（**0.005 USDC** on Base Sepolia），自动在本地输出结构化审计 JSON 与**极简黑白专业 Word (.docx) 战地研判报告**。
-
-> 📘 **新手与 Agent 必读**：请参阅 [《使用者与 Agent 全流程操作指南》](操作指南与Agent调用手册.md)，包含详细的测试网领水、钱包私钥配置、4 种自定义探险位置模式与常见问题排查。
+本项目为 **x402 协议高阶拓展项目（Level 2 方向 B）**，在 Level 2-A 开放技能集市的基础上完成了 **To-C 轻量化升级与云端 AI 调度参谋重构**：
+- **云端 AI 选路参谋 (Cloud AI Dispatcher)**：由云端服务端托管接入 **DeepSeek 大模型** 并挂载 `POST /api/recommend` 端点。接收客户端高层探险诉求，在**客观中立且零剧透**的前提下，自主输出需要购买的 API 列表及**决策思考过程 (Thinking Process)**，不加任何臃肿的主观评级或硬性指令脑补。
+- **客户端极简买手 Agent (Zero-AI-Token Client)**：**本地无需配置任何大模型 Key！** 普通用户只需持有 Web3 钱包，即可通过交互式控制台选择或自定义经纬度，自动向云端获取 AI 推荐方案，并在本地对入选微服务逐项完成 **0.001 USDC** 的真实 x402 链上微支付，实时交付专业 Word (.docx) 战地公文与 JSON 机器底稿。
 
 ---
 
-## 一、 系统架构与双智能体物理解耦设计
+## 一、 系统架构与物理解耦设计
 
 严格遵循全局工作区规范与生产级物理隔离安全标准：
 
 ```
 Level2_b/
-├── server/                          # 【服务端 / 智能体即服务 (AaaS)】
-│   ├── api/index.js                 # 挂载 x402 中间件与 /api/agent/consult 咨询端点
-│   ├── server.js                    # 本地调试 Express 监听入口 (PORT: 3000)
+├── server/                          # 【服务端 / 智能微服务与云端参谋】
+│   ├── api/index.js                 # 挂载 x402 中间件与 /api/recommend 云端调度端点
+│   ├── server.js                    # 本地调试 Express 监听入口 (PORT: 3001)
 │   ├── package.json                 # 服务端独立依赖 (@x402/core, @x402/evm, express 等)
 │   ├── vercel.json                  # 云端 Serverless 路由重写规则
 │   ├── .env.example                 # 包含公开 PAY_TO 与 DEEPSEEK_API_KEY 预留配置
 │   └── src/
-│       ├── agent/                   # 核心：deepseek_agent.js (服务端 DeepSeek 参谋智能体)
+│       ├── agent/                   # recommender.js (云端轻量化 DeepSeek 选路参谋)
 │       ├── config/
-│       │   ├── API_SKILL.md         # ★ 核心解耦：独立 Markdown 技能规范文档 (热加载)
-│       │   ├── catalog.js           # 微服务路由与 x402 支付规格配置
+│       │   ├── SKILL.md             # 客观中立技能规范文档
+│       │   ├── catalog.js           # 11 个微服务路由与 x402 支付规格配置
 │       │   ├── network.js           # Base Sepolia 链配置
-│       │   └── payee.js             # 服务端收款钱包配置
-│       ├── lib/                     # 高可用自愈 Facilitator 客户端、HTTP 容错与地理编码
+│       │   └── payee.js             # 服务端收款钱包配置 (0xdcD7DAFafb0EF3d50bDdB480Dbd503Fa6D1B6C09)
+│       ├── lib/                     # HTTP 统一容错超时、球面距离与地理编码 (location.js)
 │       └── providers/               # 11 个真实上游数据源驱动（地质/气象/水文/地形/沙尘/日照/空间天气等）
 │
-├── client/                          # 【客户端 / 探险决策 Agent 消费端】
-│   ├── package.json                 # 客户端独立依赖 (@x402/fetch, @x402/evm, docx 等)
-│   ├── .env.example                 # 客户端独立管理付款私钥 PAYER_PRIVATE_KEY
+├── client/                          # 【客户端 / 本地轻量化采购消费端 (0 大模型依赖)】
+│   ├── package.json                 # 客户端独立依赖 (@x402/fetch, @x402/evm, docx, viem 等)
+│   ├── .env.example                 # 客户端仅管理付款私钥 PAYER_PRIVATE_KEY，无需 AI Token！
 │   ├── reports/                     # 结构化审计 JSON 与战地 Word (.docx) 报告归档目录
 │   └── src/
 │       ├── config/wallet.js         # 付款钱包安全加载器
-│       ├── lib/docx_exporter.js     # 专业战地 Word 决策评估报告排版导出引擎 (极简黑白公文风)
-│       ├── export_word.js           # 独立转 Word 命令行与脚本工具
-│       ├── agent.js                 # 客户端 Agent：发起咨询、EVM 结算并自动产出报告
+│       ├── lib/docx_exporter.js     # 专业战地 Word 决策评估报告排版导出引擎
+│       ├── cli.js                   # 统一跨平台交互控制器 (支持预设 1~5 与 6 自定义经纬度)
+│       ├── export_word.js           # 独立转 Word 命令行工具
+│       ├── agent.js                 # 核心：咨询云端参谋、逐项 EVM 结算并自动产出报告
 │       └── reconcile.js             # 链上 USDC 交易哈希与余额自动化审计工具
 │
-├── 启动服务端.bat                   # Windows 一键启动服务端
-├── 运行探险决策Agent.bat            # Windows 一键运行客户端 Agent (集成交互式选点菜单与 Word 导出)
-├── 运行链上对账.bat                 # Windows 一键运行链上审计对账
-├── 生成最新Word报告.bat             # Windows 一键将最新对账数据转为 Word 报告
-├── 操作指南与Agent调用手册.md       # ★ 核心文档：面向使用者与 AI Agent 的完整使用手册
+├── 运行探险决策Agent.bat            # Windows 唯一一体化全能控制台 (纯 ASCII，直通 cli.js)
+├── 运行探险决策Agent.sh             # macOS / Linux 唯一一体化全能控制台
+├── vercel.json                      # 根目录 Vercel 一键直推部署配置
 └── 项目交接与全流程上下文总结.md    # 核心交接档案
 ```
 
 ---
 
-## 二、 核心技术创新与设计亮点
+## 二、 11 个外部微服务能力清单 (API Toolset Catalog)
 
-### 1. 业务通信与领域知识 100% 物理文档解耦 (API_SKILL.md 驱动)
-- 将 11 个微服务的数据能力规范、参数与评估准则彻底抽离到独立的本地文档 [`server/src/config/API_SKILL.md`](server/src/config/API_SKILL.md)；
-- 服务端代码中仅保留纯粹的网络收发与调度逻辑，大模型调用前通过 Node.js 原生 `fs.readFileSync` 动态装载；
-- **热更新维护**：后续增减微服务或微调提示词时，无需修改任何 JavaScript 代码，直接编辑 Markdown 保存即可实时生效。
-
-### 2. 彻底解除噪音预标注，环境自适应 Agent 认知
-- 彻底移除代码与文档中所有的 `isNoise: true/false` 与 `noise_*` 分类，所有 11 个微服务均以客观科学领域平铺展现；
-- DeepSeek 依据目标地貌特征自主分析威胁并进行准入裁决：
-  - **珠峰雪山场景**：自主保留冰湖溃决洪涝风险，主动排除洁净大气下的沙尘接口；
-  - **塔克拉玛干沙漠场景**：自主保留强风蚀沙尘暴监测，主动排除无常年河道的流域洪涝接口；
-  - 稳定排除与野外生存毫无因果关系的金融外汇、猫咪科普、代币行情与空间站轨迹。
-
-### 3. 多模式灵活自定义探险目标
-- **交互式控制台菜单**：双击 `运行探险决策Agent.bat` 可按数字选择预置全球极境（阿尔金山、珠峰大本营、塔克拉玛干腹地、罗布泊大海道、神农架原始森林），或输入 `6` 自由输入任意经纬度、地名与探险性质；
-- **命令行传参模式**：支持 `node src/agent.js <lat> <lon> <地名> <探险性质>`；
-- **环境变量配置模式**：支持在 `client/.env` 中直接修改 `EXPEDITION_LAT` 与 `EXPEDITION_LOCATION`。
-
-### 4. 极简黑白专业 Word (.docx) 战地研判报告自动排版
-- 集成纯 JavaScript 的 `docx` 排版引擎，全流程自动化生成；
-- 遵循极简公文/专业技术报告风格，**仅使用干净的黑色细边框表格与标准纯黑文字**，彻底去除花哨色彩底色，极简素雅、适宜打印存档；
-- 涵盖任务元数据汇总表、参谋长核心态势裁决、前线致命威胁清单、核心物理遥感实测表、微服务筛选排除存证库及链上 Tx 结算凭证。
-
-### 5. 严苛数据完备性与防伪报告护栏 (Zero False-Safety Defense)
-- **全盘失败绝对熔断**：当微服务采集成功数为 0 时，服务端直接熔断拦截，严禁大模型二次脑补，直接出具 `CRITICAL_DATA_DEFICIENCY`（致命情报盲区）特级避险警报；
-- **部分缺失防伪紧箍咒**：当存在部分端点采集失败时，强制向 DeepSeek 注入盲区铁血约束，严禁凭空臆造缺失维度，必须在裁决中首句示警，并将盲区列为首要致命威胁，风险等级强制上调；
-- **Word 报告高亮红框置顶警示**：若存在情报盲区，导出的 Word 报告首页显要位置自动插入【🚨 关键环境遥测缺失与数据盲区特级警示】红框，遥测明细明确标红失败项，严禁伪装为表面正常报告。
+| 序号 | 接口 ID | 路由路径 | 数据源 | 坐标需求 | 单价 | 服务能力与核心监测指标 |
+| :---: | :--- | :--- | :--- | :---: | :---: | :--- |
+| 1 | **earthquake** | `/api/survival/earthquake` | USGS FDSN Event API | 需 `lat`, `lon` | $0.001 | 监测 500km 半径过去 7 天 M2.5+ 地震烈度与震源距，评估地质活动与滑坡隐患。 |
+| 2 | **storm** | `/api/survival/storm` | Open-Meteo Forecast | 需 `lat`, `lon` | $0.001 | 监测实况/24h风速、极大阵风、雨雪累计与最低气温，评估强风与极寒失温威胁。 |
+| 3 | **flood** | `/api/survival/flood` | Open-Meteo GloFAS | 需 `lat`, `lon` | $0.001 | 预测未来 7 天河道径流比率与洪峰到达日，评估山洪暴发与漫滩演进。 |
+| 4 | **terrain** | `/api/survival/terrain` | Copernicus DEM 90m | 需 `lat`, `lon` | $0.001 | 十字邻点高差估算局部最大坡度与绝对高程，评估地形陡度与高反阶梯。 |
+| 5 | **dust** | `/api/survival/dust` | Open-Meteo Air Quality | 需 `lat`, `lon` | $0.001 | 监测沙尘浓度、PM10/PM2.5 质量浓度与光学厚度，评估沙尘暴肆虐程度。 |
+| 6 | **sunlight** | `/api/survival/sunlight` | Sunrise-Sunset.org | 需 `lat`, `lon` | $0.001 | 计算日出日落时刻、民用黄昏终点与有效自然光照时长，评估有效行动窗口。 |
+| 7 | **geomagnetic**| `/api/survival/geomagnetic`| NOAA SWPC K-index | 全局数据 | $0.001 | 监测实时行星 K 指数 (0~9) 及地磁暴，评估对 GPS 定位漂移与通信信标的影响。 |
+| 8 | **forex** | `/api/market/forex` | Frankfurter API | 全局数据 | $0.001 | 提供美元兑主要法定货币（CNY/EUR/JPY/GBP）实时外汇中间牌价与兑换比率。 |
+| 9 | **catfact** | `/api/info/catfact` | Cat Facts Ninja | 全局数据 | $0.001 | 提供猫科动物生物学解剖特征、生活生理习性与驯化历史科学知识。 |
+| 10 | **crypto** | `/api/market/crypto` | CoinGecko API | 全局数据 | $0.001 | 提供主流加密资产（BTC/ETH 等）在公开交易所的实时现货价格与 24h 涨跌幅。 |
+| 11 | **iss** | `/api/orbit/iss` | WhereTheISS.at | 全局数据 | $0.001 | 提供国际空间站 (ISS) 实时星下点地表经纬度、近地轨道高度 (~420km) 与飞行时速。 |
 
 ---
 
-## 三、 快速启动与本地验证
+## 三、 使用指引
 
-### 1. 启动服务端
-双击 `启动服务端.bat` 或在终端运行：
-```bash
-cd server
-npm start
-```
-服务将在 `http://localhost:3001` 启动，暴露以下核心端点：
-- 🤖 **参谋 Agent 咨询端点**：`http://localhost:3001/api/agent/consult`（打包咨询 $0.005）
-- 💚 **服务健康检查**：`http://localhost:3001/health`
-- 📋 **全量 API 目录**：`http://localhost:3001/api/catalog`
+### 1. Windows 端一键启动
+双击运行根目录下的：
+👉 **[`运行探险决策Agent.bat`](运行探险决策Agent.bat)**
 
-### 2. 运行客户端 Agent 发起咨询
-双击 `运行探险决策Agent.bat`，根据终端菜单选择或输入目标地理点：
-```bash
-cd client
-# 示例：以命令行直接调用珠穆朗玛峰大本营
-node src/agent.js 27.9881 86.9250 "珠穆朗玛峰大本营" "极高海拔极寒雪山攀登"
-```
-客户端将：
-1. 向服务端 Agent 发起探测，获取 `402 Payment Required` 账单（一口价 `0.005 USDC`）；
-2. 自动签名 EVM 支付凭据并向 Facilitator 链上清算；
-3. 获取完整战地生存裁决，自动生成 `client/reports/*.json` 与 `client/reports/*.docx` 报告。
+在交互菜单中输入：
+- `[1]` 阿尔金山无人区 (默认)
+- `[2]` 珠穆朗玛峰大本营
+- `[3]` 塔克拉玛干沙漠腹地
+- `[4]` 罗布泊大海道
+- `[5]` 香港中环商业区
+- `[6]` **自定义输入**（自主输入全球任意地名、纬度、经度与任务剖面）
+- `[7]` 直接全量采购模式（购买全部 11 项微服务）
+- `[8]` 运行链上对账与审计
+- `[9]` 重新导出 Word 报告
 
-### 3. 运行链上对账核验
-双击 `运行链上对账.bat` 或运行：
-```bash
-cd client
-npm run reconcile
-```
-
-### 4. 重新排版生成最新 Word 报告
-双击 `生成最新Word报告.bat` 或运行：
-```bash
-cd client
-npm run export-word
-```
-
----
-
-## 四、 🌐 官方在线云端服务 (Vercel Live Endpoints)
-
-本项目服务端已正式部署上线至 Vercel 云端，并接入了官方 DeepSeek 大模型中枢。全球任意客户端无需在本地运行任何服务端代码，即可直接跨网调用：
-
-- 🚀 **官方生产基准地址**：`https://server-three-nu-11.vercel.app`
-- 🤖 **参谋 Agent 咨询端点**：[`https://server-three-nu-11.vercel.app/api/agent/consult`](https://server-three-nu-11.vercel.app/api/agent/consult)（一站式打包 $0.005 USDC）
-- 💚 **在线健康检查**：[`https://server-three-nu-11.vercel.app/health`](https://server-three-nu-11.vercel.app/health)
-- 📋 **全量 API 在线目录**：[`https://server-three-nu-11.vercel.app/api/catalog`](https://server-three-nu-11.vercel.app/api/catalog)
-
-> **直接使用方式**：使用者只需在客户端 `client/.env` 中配置：
-> ```ini
-> TARGET_URL=https://server-three-nu-11.vercel.app
-> ```
-> 双击 `运行探险决策Agent.bat`，即可直接向云端 DeepSeek 参谋 Agent 发起咨询并自动生成 Word 报告！
-
+### 2. 交付文件查阅
+每次运行完成后，Word 报告与 JSON 底稿自动保存在：
+👉 `client/reports/survival_recon_<时间戳>.docx`
+可直接在电脑上双击打开阅读。

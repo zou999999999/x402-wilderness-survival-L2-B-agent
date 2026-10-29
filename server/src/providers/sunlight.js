@@ -1,37 +1,19 @@
 import { fetchJson, round } from '../lib/http.js';
 
 /**
- * 昼夜窗口与日光生存窗口监测 —— Sunrise-Sunset.org API (集成 Open-Meteo 高可用回退)
+ * 昼夜窗口与日光生存窗口监测 —— Sunrise-Sunset.org API
  * 精确计算日出、日落、民用黄昏（天光完全变黑）以及可行动的日照总时长。
  * 野外生存铁律：必须在民用黄昏结束前 1~2 小时建立庇护所，摸黑扎营事故率激增 80% 以上。
  */
 export async function fetchSunlight(loc) {
-  let r = {};
-  let source = 'Sunrise-Sunset.org API';
-
-  try {
-    const url = `https://api.sunrise-sunset.org/json?lat=${loc.lat}&lng=${loc.lon}&formatted=0`;
-    const res = await fetchJson(url, { timeoutMs: 4000 });
-    r = res.results || {};
-  } catch (err) {
-    // 官方源遇到网络抖动，自动无缝切换至 Open-Meteo 高可用通道
-    source = 'Open-Meteo Astronomy Engine (Fallback)';
-    const fallbackUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=sunrise,sunset,daylight_duration&timezone=auto`;
-    const res = await fetchJson(fallbackUrl, { timeoutMs: 5000 });
-    const daily = res.daily || {};
-    const sunrise = daily.sunrise?.[0] ? daily.sunrise[0] + ':00Z' : null;
-    const sunset = daily.sunset?.[0] ? daily.sunset[0] + ':00Z' : null;
-    const dayLengthSeconds = daily.daylight_duration?.[0] || null;
-    r = {
-      sunrise,
-      sunset,
-      day_length: dayLengthSeconds,
-      civil_twilight_begin: sunrise,
-      civil_twilight_end: sunset
-    };
-  }
+  const url = `https://api.sunrise-sunset.org/json?lat=${loc.lat}&lng=${loc.lon}&formatted=0`;
+  const res = await fetchJson(url);
+  const r = res.results || {};
 
   const dayLengthHours = r.day_length ? round(r.day_length / 3600, 2) : null;
+  const now = Date.now();
+  const sunsetTs = r.sunset ? new Date(r.sunset).getTime() : null;
+  const twilightEndTs = r.civil_twilight_end ? new Date(r.civil_twilight_end).getTime() : null;
 
   let level = 'low';
   const advice = [];
@@ -44,11 +26,11 @@ export async function fetchSunlight(loc) {
     advice.push(`日照较短（${dayLengthHours} 小时），提前规划宿营点选址`);
   }
 
-  advice.push(`日落时间: ${r.sunset || '未知'}，民用天黑终点: ${r.civil_twilight_end || '未知'}`);
+  advice.push(`日落时间: ${r.sunset}，民用天黑终点: ${r.civil_twilight_end}`);
   advice.push('铁律：在民用天黑前至少 90 分钟停止推进，完成避风宿营、取水与防潮保温层铺设');
 
   return {
-    source,
+    source: 'Sunrise-Sunset.org API',
     data: {
       sunrise: r.sunrise,
       sunset: r.sunset,
@@ -62,7 +44,7 @@ export async function fetchSunlight(loc) {
     },
     assessment: {
       level,
-      summary: `今日总日照 ${dayLengthHours ?? '—'} 小时，日出 ${r.sunrise?.slice(11, 16) ?? '—'}，日落 ${r.sunset?.slice(11, 16) ?? '—'}，昏影止于 ${r.civil_twilight_end?.slice(11, 16) ?? '—'}`,
+      summary: `今日总日照 ${dayLengthHours ?? '—'} 小时，日出 ${r.sunrise?.slice(11, 19) ?? '—'}，日落 ${r.sunset?.slice(11, 19) ?? '—'}，民用昏影止于 ${r.civil_twilight_end?.slice(11, 19) ?? '—'}`,
       advice
     }
   };
